@@ -4511,11 +4511,15 @@ impl Connection {
             // schedule such a packet. We should also fix this some day. This makes us
             // vulnerable to an attacker faking a migration at the right time and then we'd
             // be unable to send the CONNECTION_CLOSE to the real remote.
+            //
+            // The packet that closed the connection still gets its CONNECTION_CLOSE on an
+            // unvalidated path; the anti-amplification limit caps that send.
             if self
                 .paths
                 .get(&path_id)
                 .map(|p| {
-                    p.data.validated && p.data.network_path.is_probably_same_path(&network_path)
+                    (p.data.validated || !was_closed)
+                        && p.data.network_path.is_probably_same_path(&network_path)
                 })
                 .unwrap_or(false)
             {
