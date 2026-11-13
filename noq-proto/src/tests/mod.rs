@@ -1144,6 +1144,25 @@ fn alpn_mismatch() {
 }
 
 #[test]
+fn alpn_mismatch_with_two_packet_hello() {
+    let _guard = subscribe();
+    let server_config =
+        ServerConfig::with_crypto(Arc::new(server_crypto_with_alpn(vec!["foo".into()])));
+    let mut pair = Pair::new(Arc::new(EndpointConfig::default()), server_config);
+    // 24 protocols of 64 bytes, so the ClientHello needs a second Initial packet.
+    let protocols = (0..24u8).map(|i| vec![b'a' + i; 64]).collect();
+    let client_config = ClientConfig::new(Arc::new(client_crypto_with_alpn(protocols)));
+    let client_ch = pair.begin_connect(client_config);
+
+    pair.drive();
+    assert!(pair.client_conn_mut(client_ch).stats().udp_tx.datagrams >= 2);
+    assert_matches!(
+        pair.client_conn_mut(client_ch).poll(),
+        Some(Event::ConnectionLost { reason: ConnectionError::ConnectionClosed(err) }) if err.error_code == TransportErrorCode::crypto(0x78)
+    );
+}
+
+#[test]
 fn stream_id_limit() {
     let _guard = subscribe();
     let server = ServerConfig {
